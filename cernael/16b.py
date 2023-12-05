@@ -26,26 +26,31 @@ class Path:
         if path:
             self.unvisited = path.unvisited[:]
             self.unvisited.remove(room)
-            self.path = path.path[:]
-            self.time_left = (path.time_left - path.path[-1].map[room.name]["cost"])
-
-            self.pressure_released = path.pressure_released + room.rate * self.time_left
+            self.path = [p[:] for p in path.path]
+            self.time_left = path.time_left[:]
+            self.pos = path.pos[:]
+            i = 0 if path.time_left[0] > path.time_left[1] else 1
+            self.time_left[i] = (path.time_left[i] - rooms[path.path[i][-1][0]].map[room.name]["cost"])
+            self.pressure_released = path.pressure_released + room.rate * self.time_left[i]
+            self.pos[i] = room
+            self.path[i].append((room.name, 26 - self.time_left[i]))
         else:
             self.unvisited = [r for r in rooms.values() if r.rate]
-            self.path = []
+            self.path = [[(room.name,0)],[(room.name,0)]]
 
             self.pressure_released = 0
-            self.time_left = 30
-        self.path.append(room)
+            self.time_left = [26,26]
+            self.pos = [room, room]
+
+        first_time_left = self.time_left[0] - min(map(lambda x: x['cost'], self.pos[0].map.values()))
+        second_time_left = self.time_left[1] - min(map(lambda x: x['cost'], self.pos[1].map.values()))
         self.max = (self.pressure_released +
             sum(
                 map(
                     lambda x: x[0] * x[1].rate,
                     zip(
-                        range(
-                            self.time_left - min(map(lambda x: x['cost'], room.map.values())),
-                            0,
-                            -1),
+                        sorted(list(range(second_time_left+1)) +
+                        list(range(first_time_left+1)), reverse=True),
                         sorted(
                             self.unvisited,
                             key=lambda x: x.rate,
@@ -55,15 +60,21 @@ class Path:
                 )
             )
         )
+
     def __repr__(self):
         return """unvisited: {},
-        path: {},
+        path1: {},
+        path2: {},
         time left: {},
         pressure released: {},
-        max: {}""".format(list(map(lambda x: x.name, self.unvisited)), list(map(lambda x: x.name, self.path)), self.time_left, self.pressure_released, self.max())
+        max: {}""".format(
+            list(map(lambda x: x.name, self.unvisited)),
+            self.path[0],
+            self.path[1],
+            self.time_left, self.pressure_released, self.max)
 
     def __lt__(self, other):
-        if self.time_left < other.time_left:
+        if max(self.time_left) < max(other.time_left):
             return True
         return self.max < other.max
 
@@ -81,17 +92,20 @@ def solve(lines):
     minn = 0
     n = 0
     p = 1
+    last = paths[0]
     while paths:
         n += 1
         #print(n, len(paths))
         #if n > 100: return
         paths.sort(key=lambda x: x.time_left)
         path = paths.pop(0)
-        minn = max(minn, path.pressure_released)
-        if path.max >= minn and path.time_left >= 0:
+        if minn < path.pressure_released:
+            minn = path.pressure_released
+            last = path
+        if path.max >= minn and max(path.time_left) >= 0:
             p += len(path.unvisited) - 1
             paths.extend([Path(rooms, r, path) for r in path.unvisited])
-    return minn, n, p
+    return minn, n, p, last
 
 if __name__ == '__main__':
     lines = []
